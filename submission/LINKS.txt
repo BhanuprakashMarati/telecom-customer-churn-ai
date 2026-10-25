@@ -33,7 +33,7 @@ b) Render / Hugging Face Spaces / Railway:
 
 3. SOURCE CODE REPOSITORY:
 --------------------------------------------------------------------------------
-GitHub Repository: [PASTE YOUR GITHUB REPOSITORY URL HERE]
+GitHub Repository: https://github.com/BhanuprakashMarati/telecom-customer-churn-ai
 
 
 4. PROJECT SUBMISSION METADATA:

@@ -99,3 +99,20 @@ def test_model_relative_risk_sanity():
     # Sanity check: Short tenure + month-to-month must have strictly higher churn probability than 70-month + 2-year contract
     assert res_high.churn_probability > res_low.churn_probability
     assert res_low.risk_category == "Low Risk"
+
+
+def test_predict_batch_vectorized():
+    import pandas as pd
+    service = ModelService.get_instance()
+
+    # Test full dataset batch inference
+    data_path = os.path.join(BASE_DIR, "data", "WA_Fn-UseC_-Telco-Customer-Churn.csv")
+    df = pd.read_csv(data_path)
+    res = service.predict_batch(df)
+
+    assert len(res) == len(df)
+    assert set(res.columns) == {"Customer_Row", "Churn_Probability", "Risk_Tier", "Predicted_Label"}
+    assert res["Churn_Probability"].between(0.0, 1.0).all()
+    assert set(res["Risk_Tier"].unique()).issubset({"Low Risk", "Medium Risk", "High Risk"})
+    assert set(res["Predicted_Label"].unique()).issubset({"Churn", "Retain"})
+    assert res.isnull().sum().sum() == 0

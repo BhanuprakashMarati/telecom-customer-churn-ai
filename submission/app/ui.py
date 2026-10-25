@@ -19,6 +19,17 @@ if APP_DIR not in sys.path:
 import requests
 import streamlit as st
 import pandas as pd
+import time
+
+
+@st.cache_resource
+def get_cached_model_service():
+    """Load model service once and cache in memory across Streamlit reruns."""
+    try:
+        from app.inference import ModelService
+    except ModuleNotFoundError:
+        from inference import ModelService
+    return ModelService.get_instance()
 
 # Page Configuration
 st.set_page_config(
@@ -299,13 +310,11 @@ with tab1:
         if result is None:
             try:
                 try:
-                    from app.inference import ModelService
                     from app.schemas import CustomerInput
                 except ModuleNotFoundError:
-                    from inference import ModelService
                     from schemas import CustomerInput
 
-                service = ModelService.get_instance()
+                service = get_cached_model_service()
                 cust_obj = CustomerInput(**payload)
                 resp_obj = service.predict(cust_obj)
                 result = resp_obj.model_dump()
@@ -419,40 +428,56 @@ with tab3:
             st.write(f"Loaded {len(batch_df)} rows. Sample preview:")
             st.dataframe(batch_df.head(5))
 
-            if st.button("🚀 Process Batch Predictions"):
-                try:
-                    from app.inference import ModelService
-                    from app.schemas import CustomerInput
-                except ModuleNotFoundError:
-                    from inference import ModelService
-                    from schemas import CustomerInput
+            if st.button("🚀 Process Batch Predictions", use_container_width=True):
+                service = get_cached_model_service()
+                if not service.is_ready:
+                    st.error("Model artifacts not available. Please ensure model training has been completed.")
+                else:
+                    progress_bar = st.progress(0, text="Initializing vectorized batch prediction engine...")
+                    t_start = time.time()
 
-                service = ModelService.get_instance()
+                    def update_progress(ratio: float):
+                        pct = int(ratio * 100)
+                        progress_bar.progress(min(max(ratio, 0.0), 1.0), text=f"Scoring customer accounts... {pct}%")
 
-                results = []
-                for idx, row in batch_df.iterrows():
                     try:
-                        c_dict = row.to_dict()
-                        inp = CustomerInput(**c_dict)
-                        pred = service.predict(inp)
-                        results.append({
-                            "Customer_Row": idx + 1,
-                            "Churn_Probability": pred.churn_probability,
-                            "Risk_Tier": pred.risk_category,
-                            "Predicted_Label": "Churn" if pred.churn_prediction == 1 else "Retain",
-                        })
-                    except Exception as err:
-                        results.append({
-                            "Customer_Row": idx + 1,
-                            "Churn_Probability": None,
-                            "Risk_Tier": "Error",
-                            "Predicted_Label": str(err),
-                        })
+                        res_df = service.predict_batch(batch_df, chunk_size=2000, progress_callback=update_progress)
+                        elapsed = time.time() - t_start
+                        progress_bar.progress(1.0, text=f"Completed scoring in {elapsed:.2f} seconds!")
 
-                res_df = pd.DataFrame(results)
-                combined_df = pd.concat([batch_df.reset_index(drop=True), res_df], axis=1)
-                st.success(f"Successfully processed {len(res_df)} customer records!")
-                st.dataframe(combined_df.head(10))
+                        combined_df = pd.concat([batch_df.reset_index(drop=True), res_df.reset_index(drop=True)], axis=1)
+
+                        total_count = len(res_df)
+                        high_count = int((res_df["Risk_Tier"] == "High Risk").sum())
+                        med_count = int((res_df["Risk_Tier"] == "Medium Risk").sum())
+                        low_count = int((res_df["Risk_Tier"] == "Low Risk").sum())
+                        rate = total_count / max(elapsed, 0.001)
+
+                        st.success(
+                            f"Successfully evaluated {total_count:,} customer records in {elapsed:.2f} seconds ({rate:,.0f} records/sec)!"
+                        )
+
+                        b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+                        b_col1.metric("Total Evaluated", f"{total_count:,}")
+                        b_col2.metric("High Risk (Critical)", f"{high_count:,}", f"{high_count/total_count*100:.1f}%")
+                        b_col3.metric("Medium Risk", f"{med_count:,}", f"{med_count/total_count*100:.1f}%")
+                        b_col4.metric("Low Risk (Stable)", f"{low_count:,}", f"{low_count/total_count*100:.1f}%")
+
+                        st.markdown("##### Scored Records Preview")
+                        st.dataframe(combined_df.head(15), use_container_width=True)
+
+                        csv_buffer = io.StringIO()
+                        combined_df.to_csv(csv_buffer, index=False)
+                        st.download_button(
+                            label="📥 Download Scored Customer Predictions CSV",
+                            data=csv_buffer.getvalue(),
+                            file_name="telco_churn_batch_predictions.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                        )
+                    except Exception as err:
+                        progress_bar.empty()
+                        st.error(f"Batch prediction processing failed: {err}")
 
                 csv_buffer = io.StringIO()
                 combined_df.to_csv(csv_buffer, index=False)

@@ -5,7 +5,8 @@ and produces defensible factor explanations.
 import json
 import os
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
+import numpy as np
 
 # Ensure repository root and app directory are on sys.path
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -102,6 +103,141 @@ class ModelService:
             key_risk_factors=factors,
             recommended_retention_actions=actions,
         )
+
+    def predict_batch(
+        self,
+        df: pd.DataFrame,
+        chunk_size: int = 2500,
+        progress_callback: Optional[Callable[[float], None]] = None,
+    ) -> pd.DataFrame:
+        """
+        Execute highly efficient, vectorized batch inference on a DataFrame.
+        Handles data cleaning, missing value imputation, type casting,
+        and vectorized risk categorization without row-by-row iteration.
+        """
+        if not self.is_ready:
+            raise RuntimeError("Model pipeline artifact not loaded. Train model first.")
+
+        if df.empty:
+            return pd.DataFrame(columns=["Customer_Row", "Churn_Probability", "Risk_Tier", "Predicted_Label"])
+
+        numeric_features = ["tenure", "MonthlyCharges", "TotalCharges"]
+        categorical_features = [
+            "gender",
+            "SeniorCitizen",
+            "Partner",
+            "Dependents",
+            "PhoneService",
+            "MultipleLines",
+            "InternetService",
+            "OnlineSecurity",
+            "OnlineBackup",
+            "DeviceProtection",
+            "TechSupport",
+            "StreamingTV",
+            "StreamingMovies",
+            "Contract",
+            "PaperlessBilling",
+            "PaymentMethod",
+        ]
+
+        # Verify presence of essential features
+        missing_critical = [col for col in ["MonthlyCharges", "Contract"] if col not in df.columns]
+        if missing_critical:
+            raise ValueError(f"Batch dataset missing critical columns: {missing_critical}")
+
+        # Vectorized feature dataframe construction
+        working_df = pd.DataFrame(index=df.index)
+
+        # 1. Numeric features
+        if "tenure" in df.columns:
+            working_df["tenure"] = pd.to_numeric(df["tenure"], errors="coerce").fillna(1).astype(int)
+        else:
+            working_df["tenure"] = 1
+
+        if "MonthlyCharges" in df.columns:
+            working_df["MonthlyCharges"] = pd.to_numeric(df["MonthlyCharges"], errors="coerce").fillna(65.0).astype(float)
+        else:
+            working_df["MonthlyCharges"] = 65.0
+
+        if "TotalCharges" in df.columns:
+            cleaned_total = pd.to_numeric(df["TotalCharges"].astype(str).str.strip(), errors="coerce")
+            imputed_total = working_df["tenure"] * working_df["MonthlyCharges"]
+            working_df["TotalCharges"] = cleaned_total.fillna(imputed_total).astype(float)
+        else:
+            working_df["TotalCharges"] = (working_df["tenure"] * working_df["MonthlyCharges"]).astype(float)
+
+        # 2. Categorical features
+        defaults = {
+            "gender": "Female",
+            "SeniorCitizen": "0",
+            "Partner": "No",
+            "Dependents": "No",
+            "PhoneService": "Yes",
+            "MultipleLines": "No",
+            "InternetService": "Fiber optic",
+            "OnlineSecurity": "No",
+            "OnlineBackup": "No",
+            "DeviceProtection": "No",
+            "TechSupport": "No",
+            "StreamingTV": "No",
+            "StreamingMovies": "No",
+            "Contract": "Month-to-month",
+            "PaperlessBilling": "Yes",
+            "PaymentMethod": "Electronic check",
+        }
+
+        for cat_col in categorical_features:
+            if cat_col in df.columns:
+                working_df[cat_col] = df[cat_col].astype(str).str.strip()
+                if cat_col == "SeniorCitizen":
+                    working_df[cat_col] = working_df[cat_col].replace({"0.0": "0", "1.0": "1", "0": "0", "1": "1"})
+            else:
+                working_df[cat_col] = defaults[cat_col]
+
+        feature_matrix = working_df[numeric_features + categorical_features]
+        total_rows = len(feature_matrix)
+
+        # 3. Vectorized chunked prediction
+        all_probas = []
+        if total_rows <= chunk_size:
+            all_probas = self.pipeline.predict_proba(feature_matrix)[:, 1]
+            if progress_callback:
+                progress_callback(1.0)
+        else:
+            num_chunks = int(np.ceil(total_rows / chunk_size))
+            for i in range(num_chunks):
+                start_idx = i * chunk_size
+                end_idx = min(start_idx + chunk_size, total_rows)
+                chunk = feature_matrix.iloc[start_idx:end_idx]
+                chunk_probas = self.pipeline.predict_proba(chunk)[:, 1]
+                all_probas.append(chunk_probas)
+                if progress_callback:
+                    progress_callback(float((i + 1) / num_chunks))
+            all_probas = np.concatenate(all_probas)
+
+        probas = np.asarray(all_probas, dtype=float)
+
+        # 4. Vectorized risk categorization (strictly aligned with model governance)
+        risk_conditions = [
+            probas < 0.35,
+            (probas >= 0.35) & (probas < 0.65),
+            probas >= 0.65,
+        ]
+        risk_choices = ["Low Risk", "Medium Risk", "High Risk"]
+        risk_tiers = np.select(risk_conditions, risk_choices, default="Medium Risk")
+        predicted_labels = np.where(probas >= 0.5, "Churn", "Retain")
+
+        results_df = pd.DataFrame(
+            {
+                "Customer_Row": np.arange(1, total_rows + 1),
+                "Churn_Probability": np.round(probas, 4),
+                "Risk_Tier": risk_tiers,
+                "Predicted_Label": predicted_labels,
+            },
+            index=df.index,
+        )
+        return results_df
 
     def _explain_risk_factors(self, cust: CustomerInput, proba: float) -> List[RiskFactorDetail]:
         """Produce defensible customer-specific risk drivers."""

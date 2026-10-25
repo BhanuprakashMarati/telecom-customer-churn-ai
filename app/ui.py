@@ -5,6 +5,17 @@ Communicates with FastAPI backend with fallback to direct model inference.
 import io
 import json
 import os
+import sys
+
+# Ensure repository root and app directory are on sys.path for robust imports across environments (e.g. Streamlit Cloud)
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
 import requests
 import streamlit as st
 import pandas as pd
@@ -287,8 +298,13 @@ with tab1:
         # Fallback to local inference if API was not reachable
         if result is None:
             try:
-                from app.inference import ModelService
-                from app.schemas import CustomerInput
+                try:
+                    from app.inference import ModelService
+                    from app.schemas import CustomerInput
+                except ModuleNotFoundError:
+                    from inference import ModelService
+                    from schemas import CustomerInput
+
                 service = ModelService.get_instance()
                 cust_obj = CustomerInput(**payload)
                 resp_obj = service.predict(cust_obj)
@@ -404,8 +420,13 @@ with tab3:
             st.dataframe(batch_df.head(5))
 
             if st.button("🚀 Process Batch Predictions"):
-                from app.inference import ModelService
-                from app.schemas import CustomerInput
+                try:
+                    from app.inference import ModelService
+                    from app.schemas import CustomerInput
+                except ModuleNotFoundError:
+                    from inference import ModelService
+                    from schemas import CustomerInput
+
                 service = ModelService.get_instance()
 
                 results = []

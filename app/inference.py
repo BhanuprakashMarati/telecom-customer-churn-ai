@@ -4,10 +4,25 @@ and produces defensible factor explanations.
 """
 import json
 import os
+import sys
 from typing import Dict, List, Tuple
+
+# Ensure repository root and app directory are on sys.path
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
 import joblib
 import pandas as pd
-from app.schemas import CustomerInput, PredictionResponse, RiskFactorDetail
+
+try:
+    from app.schemas import CustomerInput, PredictionResponse, RiskFactorDetail
+except ModuleNotFoundError:
+    from schemas import CustomerInput, PredictionResponse, RiskFactorDetail
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_PATH = os.path.join(BASE_DIR, "model", "model.joblib")

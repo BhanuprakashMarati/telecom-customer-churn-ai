@@ -3,10 +3,26 @@ FastAPI Backend for Telecom Customer Churn Prediction.
 Provides GET /health and POST /predict with full validation and error handling.
 """
 import logging
+import os
+import sys
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from app.inference import ModelService
-from app.schemas import CustomerInput, HealthResponse, PredictionResponse
+
+# Ensure repository root and app directory are on sys.path
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if APP_DIR not in sys.path:
+    sys.path.insert(0, APP_DIR)
+
+try:
+    from app.inference import ModelService
+    from app.schemas import CustomerInput, HealthResponse, PredictionResponse
+except ModuleNotFoundError:
+    from inference import ModelService
+    from schemas import CustomerInput, HealthResponse, PredictionResponse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

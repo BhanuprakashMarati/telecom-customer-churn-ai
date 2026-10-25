@@ -1,0 +1,46 @@
+================================================================================
+TELECOM CUSTOMER CHURN PREDICTION SYSTEM — SUBMISSION LINKS & DEPLOYMENT STATUS
+================================================================================
+
+1. DEMONSTRATION VIDEO LINK:
+--------------------------------------------------------------------------------
+Demo Video URL: [PASTE YOUR RECORDED DEMO VIDEO LINK HERE]
+(Recommended platforms: YouTube Unlisted, Google Drive public link, or Loom)
+Refer to DEMO_CHECKLIST.md for recording protocol and script breakdown.
+
+
+2. LIVE DEPLOYMENT STATUS & URLS:
+--------------------------------------------------------------------------------
+Local Verified Operational URLs:
+- FastAPI Interactive API (Swagger UI): http://127.0.0.1:8000/docs
+- FastAPI Health Endpoint:             http://127.0.0.1:8000/health
+- Streamlit Analytics Dashboard:        http://localhost:8501
+
+Cloud Public Deployment Status:
+- Containerization: Fully configured and verified via Dockerfile and docker-compose.yml.
+- Public Host Status: Requires user cloud provider authentication (no external cloud
+  tokens pre-configured in local offline workspace).
+- Public Deployment URL: [PASTE YOUR CLOUD LIVE DEPLOYMENT URL HERE IF DEPLOYED]
+
+Quick 2-Minute Deployment Options:
+a) Streamlit Community Cloud (Free):
+   - Push repository to GitHub.
+   - Go to https://share.streamlit.io -> Deploy new app.
+   - Select repository, branch 'main', and entry file 'app/ui.py'.
+b) Render / Hugging Face Spaces / Railway:
+   - Connect repository and select Dockerfile deployment.
+
+
+3. SOURCE CODE REPOSITORY:
+--------------------------------------------------------------------------------
+GitHub Repository: [PASTE YOUR GITHUB REPOSITORY URL HERE]
+
+
+4. PROJECT SUBMISSION METADATA:
+--------------------------------------------------------------------------------
+Project Name:       End-to-End AI Project Deployment — Telecom Customer Churn Prediction
+Champion Model:     Random Forest Classifier (250 estimators, max depth 8, balanced)
+Empirical Metrics:  ROC-AUC: 0.8423 | Recall: 0.7941 | F1-Score: 0.6266 | Accuracy: 0.7488
+Test Set Size:      1,409 customer accounts (20% held-out stratified test set)
+Test Suite Status:  11 passed in pytest (data, model, API endpoints, schema validation)
+================================================================================

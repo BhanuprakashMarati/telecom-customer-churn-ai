@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  telecom-churn-system:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telecom_churn_service
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    environment:
+      - PORT=8000
+      - STREAMLIT_PORT=8501
+    restart: unless-stopped
